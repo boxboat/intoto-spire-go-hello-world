@@ -23,11 +23,7 @@ func main() {
 	visitsByIp := make(map[string]uint)
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		ip := getRequestIp(r)
-		visits, ok := visitsByIp[ip]
-		if !ok {
-			visits = 0
-		}
-
+		visits := visitsByIp[ip]
 		visits += 1
 		visitsByIp[ip] = visits
 		response := fmt.Sprintf(responseTemplate, visits)
