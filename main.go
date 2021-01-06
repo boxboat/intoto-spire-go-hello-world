@@ -36,7 +36,9 @@ func main() {
 		log.Println(fmt.Sprintf("Visited by %v", ip))
 	})
 
-	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%v", *port), nil))
+	addr := fmt.Sprintf(":%v", *port)
+	log.Println(fmt.Sprintf("Listening on %v", addr))
+	log.Fatal(http.ListenAndServe(addr, nil))
 }
 
 func getRequestIp(r *http.Request) string {
