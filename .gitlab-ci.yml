@@ -1,0 +1,71 @@
+variables:
+
+stages:
+  - clone
+  - build
+  - verify
+
+clone:
+  stage: clone
+  image: registry.gitlab.com/boxboat/demos/intoto-spire/intoto-builder
+  variables:
+    GIT_STRATEGY: none
+  before_script:
+    - echo $CLONE_KEY | base64 -d > clone
+  script:
+    - in-toto-run --step-name clone --products go-hello-world --lstrip-paths go-hello-world/ --key clone -v -- git clone https://gitlab.com/boxboat/demos/intoto-spire/go-hello-world
+  artifacts:
+    paths:
+      - ./clone.*.link
+
+build:
+  stage: build
+  image: registry.gitlab.com/boxboat/demos/intoto-spire/intoto-builder
+  dependencies: []
+  before_script:
+    - echo $BUILD_KEY | base64 -d > build
+    - echo "machine gitlab.com login gitlab-ci-token password ${CI_JOB_TOKEN}" > ~/.netrc
+  script:
+    - in-toto-run --step-name build --materials "./*" --products "go-hello-world" --key build -v -- go build ./...
+  artifacts:
+    paths:
+      - ./build.*.link
+
+build image:
+  stage: build
+  image: registry.gitlab.com/boxboat/demos/intoto-spire/intoto-builder
+  dependencies: []
+  services:
+    - docker:19.03.12-dind
+  variables:
+    DOCKER_HOST: tcp://docker:2375
+    DOCKER_TLS_CERTDIR: ""
+  before_script:
+    - echo $BUILD_IMAGE_KEY | base64 -d > build-image
+  script:
+    - in-toto-record start --step-name build-image --materials "./*" --key build-image -v
+    - docker build . -t registry.gitlab.com/boxboat/demos/intoto-spire/go-hello-world --iidfile image-id
+    - docker save --output go-hello-world.tar registry.gitlab.com/boxboat/demos/intoto-spire/go-hello-world
+    - in-toto-record stop --step-name build-image --products go-hello-world.tar image-id --key build-image -v
+  artifacts:
+    paths:
+      - ./build-image.*.link
+      - ./image-id
+      - ./go-hello-world.tar
+
+verify image:
+  stage: verify
+  image: registry.gitlab.com/boxboat/demos/intoto-spire/intoto-builder
+  services:
+    - docker:19.03.12-dind
+  variables:
+    DOCKER_HOST: tcp://docker:2375
+    DOCKER_TLS_CERTDIR: ""
+  before_script:
+    - echo $OWNER_PUB_KEY | base64 -d > owner.pub
+  script:
+     - in-toto-verify --layout /root/root.layout --layout-keys owner.pub -v
+     - docker load -i ./go-hello-world.tar
+     - docker login registry.gitlab.com -u ${CI_REGISTRY_USER} -p ${CI_REGISTRY_PASSWORD}
+     - docker tag registry.gitlab.com/boxboat/demos/intoto-spire/go-hello-world:latest registry.gitlab.com/boxboat/demos/intoto-spire/go-hello-world:${CI_COMMIT_SHORT_SHA}
+     - docker push registry.gitlab.com/boxboat/demos/intoto-spire/go-hello-world:${CI_COMMIT_SHORT_SHA}
